@@ -1,14 +1,22 @@
+
+#define converter 1000000LL  /* Conversion factor for micro seconds to seconds */
+#define TIME_TO_SLEEP 15        /* Time ESP32 will go to sleep (in seconds)3600=1hour */
+const long  gmtOffset_sec = -1000*60;
+const int   daylightOffset_sec = 0;
+const char* ntpServer = "pool.ntp.org";
+
+///////////////////////////////////////////////////////////////////////////
 #include <WiFi.h>
 #include <HTTPClient.h>
-
+#include <Wire.h>
 
 /********************************************************************************/
-//Things to update
-const char * ssid = "YOURSSID";
+//Things to change
+const char * ssid = "SSID";
 const char * password = "PASSWORD";
-String GOOGLE_SCRIPT_ID = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+String GOOGLE_SCRIPT_ID = "%%%%%%YOUR GOOG SCRIPT ID%%%%%%%%%";
 
-const int delayTime = 10000; 
+const int sendInterval = 10000; 
 String payload;
 /********************************************************************************/
 /********************************************************************************/
@@ -23,6 +31,69 @@ int lowerReed = 22;
 int upperReed = 23;
 int stateOfLowerReed = 0;
 int stateOfUpperReed = 0;
+int x=0;
+void motorUp() {
+      x=0;
+      while (stateOfUpperReed != LOW)  {
+        Serial.println("motorUP");
+        analogWrite(enA, 255);
+        digitalWrite(in1, HIGH);
+        digitalWrite(in2, LOW);
+        delay(1000);
+        stateOfUpperReed = digitalRead(upperReed);
+        if (x >20){
+           while (true){
+            Serial.println("reed switch failed");
+          }
+        }
+        x=x+1;
+  }
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+}
+
+void motorDown() {
+      x=0;
+      while (stateOfLowerReed != LOW) {
+        Serial.println("motordown");
+        analogWrite(enA, 255);
+        digitalWrite(in1, LOW);
+        digitalWrite(in2, HIGH);
+        delay(1000);
+        stateOfLowerReed = digitalRead(lowerReed);
+        if (x >20){
+          while (true){
+            Serial.println("reed switch failed");
+          }
+        }
+        x=x+1;
+  }
+  digitalWrite(in1, LOW);
+  digitalWrite(in2, LOW);
+}
+
+void spreadsheet_comm(void) {
+   HTTPClient http;
+   String url="https://script.google.com/macros/s/"+GOOGLE_SCRIPT_ID+"/exec?read=a2";
+//   Serial.print(url);
+  Serial.print("Making a request");
+  http.begin(url.c_str()); //Specify the URL and certificate
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  int httpCode = http.GET();
+    if (httpCode > 0) { //Check for the returning code
+        payload = http.getString();
+        
+        Serial.println(httpCode);
+        Serial.println(payload);
+      }
+    else {
+      Serial.println("Error on HTTP request");
+    }
+  http.end();
+}
+
+
+
 
 void setup() {
   pinMode(enA, OUTPUT);
@@ -41,67 +112,33 @@ void setup() {
     Serial.print(".");
   }
 
-}
-
-void loop() {
 Serial.println("starting LOOP");
-spreadsheetCall();
-delay(delayTime);
+spreadsheet_comm();
 
 stateOfLowerReed = digitalRead(lowerReed);
 stateOfUpperReed = digitalRead(upperReed);
 
 if (payload=="Open"){
   motorUp();
+  //Serial.println("MotorUP");
   }
 
 if (payload=="Close") {
   motorDown();
+  //Serial.println("motorDown");
 }
-}
-//////////////////////////////////////////////////////////////////////////////////////////////
-void motorUp() {
-  Serial.println("motor  up");
-      while (stateOfUpperReed != LOW) {
-        Serial.println("motor going up");
-        analogWrite(enA, 170);
-        digitalWrite(in1, HIGH);
-        digitalWrite(in2, LOW);
-        stateOfUpperReed = digitalRead(upperReed);
-  }
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, LOW);
-}
+  
+  // Init and get the time
+configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+Serial.println("sleep time");
+Serial.flush();
 
-void motorDown() {
-  Serial.println("motor  down");
-      while (stateOfLowerReed != LOW) {
-        Serial.println("motor going down");
-        analogWrite(enA, 255);
-        digitalWrite(in1, LOW);
-        digitalWrite(in2, HIGH);
-        stateOfLowerReed = digitalRead(lowerReed);
-  }
-  digitalWrite(in1, LOW);
-  digitalWrite(in2, LOW);
-}
 
-void spreadsheetCall(void) {
-   HTTPClient http;
-   String url="https://script.google.com/macros/s/"+GOOGLE_SCRIPT_ID+"/exec?read=a2";
-//   Serial.print(url);
-	Serial.print("Making a request");
-	http.begin(url.c_str()); //Specify the URL and certificate
-  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-	int httpCode = http.GET();
-    if (httpCode > 0) { //Check for the returning code
-        payload = http.getString();
-        
-        Serial.println(httpCode);
-        Serial.println(payload);
-      }
-    else {
-      Serial.println("Error on HTTP request");
-    }
-	http.end();
+esp_sleep_enable_timer_wakeup(uint64_t(TIME_TO_SLEEP*converter));
+esp_deep_sleep_start();
+  
+
+}
+void loop(){
+  
 }
